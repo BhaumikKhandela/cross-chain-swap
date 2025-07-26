@@ -136,6 +136,14 @@ module cross_chain_swap::base_escrow{
         escrow.cancelled
     }
 
+    public fun get_token_balance<T>(escrow: &BaseEscrow<T>): u64 {
+        balance::value(&escrow.token_balance)
+    }
+
+    public fun get_native_balance<T>(escrow: &BaseEscrow<T>): u64 {
+        escrow.native_balance
+    }
+
     public fun rescue_funds<T>(escrow: &mut BaseEscrow<T>, token_address: address, amount: u64, immutables: Immutables, clock: &Clock, ctx: &mut TxContext) {
         assert_only_taker(&immutables, ctx);
         let rescue_start_time = time_lock::rescue_start(immutables::get_timelocks(&immutables), escrow.rescue_delay);
