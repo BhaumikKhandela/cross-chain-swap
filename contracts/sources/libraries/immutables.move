@@ -69,6 +69,11 @@ module libraries::immutables{
         public fun get_hashlock(immutables: &Immutables): &vector<u8> {
             &immutables.hash_lock
         }
+        
+        public fun get_timelocks(immutables: &Immutables): &Timelocks {
+            &immutables.timelocks
+        }
+        
 
 
 
