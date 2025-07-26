@@ -10,6 +10,14 @@ module libraries::address_lib{
         chain_id: u64,
         address_bytes: vector<u8>
     }
+
+    // Function to get address_bytes
+
+    public fun get_address_bytes(address: &Address): &vector<u8> {
+         &address.address_bytes
+    }
+
+
     
     public fun from_ethereum(eth_address: vector<u8>): Address {
         assert!(vector::length(&eth_address) == 20, 1);
