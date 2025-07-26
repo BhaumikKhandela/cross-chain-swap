@@ -128,6 +128,14 @@ module cross_chain_swap::base_escrow{
         assert!(balance > 0, EINSUFFIUCIENT_ACCESS_TOKEN);
     }
 
+    public fun is_withdrawn<T>(escrow: &BaseEscrow<T>): bool {
+        escrow.withdrawn
+    }
+
+    public fun is_cancelled<T>(escrow: &BaseEscrow<T>): bool {
+        escrow.cancelled
+    }
+
     public fun rescue_funds<T>(escrow: &mut BaseEscrow<T>, token_address: address, amount: u64, immutables: Immutables, clock: &Clock, ctx: &mut TxContext) {
         assert_only_taker(&immutables, ctx);
         let rescue_start_time = time_lock::rescue_start(immutables::get_timelocks(&immutables), escrow.rescue_delay);
