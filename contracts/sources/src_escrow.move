@@ -5,14 +5,16 @@ module cross_chain_swap::src_escrow{
     use sui::tx_context::{Self, TxContext};
     use sui::clock::{Self,Clock};
     use sui::coin::{Self, Coin};
+    use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::event;
     use sui::address;
 
-    use cross_chain_swap::base_escrow::{Self, BaseEscrow, EscrowCap, AccessTokenCap, EscrowWithdrawal, EscrowCancelled};
+    use cross_chain_swap::base_escrow::{Self, BaseEscrow, EscrowCap, AccessTokenCap};
     
     use libraries::time_lock::{Self, Timelocks};
     use libraries::immutables::{Self, Immutables};
+    use libraries::time_lock::SRC_WITHDRAWAL;
 
 
     const EINVALID_CALLER: u64 = 1;
@@ -21,6 +23,17 @@ module cross_chain_swap::src_escrow{
     const EALREADY_WITHDRAWN: u64 = 7;
     const EALREADY_CANCELLED: u64 = 8;
     const EINSUFFICIENT_ACCESS_TOKEN: u64 = 9;
+
+   
+   public struct EscrowWithdrawal has copy, drop {
+        escrow_id: ID,
+        secret: vector<u8>,
+    }
+
+    public struct EscrowCancelled has copy, drop {
+        escrow_id: ID
+    }
+
 
     public struct EscrowSrc<phantom T> has key, store {
         id: UID,
@@ -33,7 +46,7 @@ module cross_chain_swap::src_escrow{
         rescue_delay: u64,
         access_token_type: address,
         initial_token: Coin<T>,
-        safety_deposit: u64,
+        safety_deposit: Coin<SUI>,
         ctx: &mut TxContext
     ): (EscrowSrc<T>, EscrowCap) {
         let ( mut base_escrow, escrow_cap ) = base_escrow::new<T>(rescue_delay, access_token_type, ctx);
@@ -54,7 +67,56 @@ module cross_chain_swap::src_escrow{
 
     }
 
-    
+public fun withdraw<T>(
+    escrow: &mut EscrowSrc<T>,
+    secret: vector<u8>,
+    immutables: Immutables,
+    clock: &Clock,
+    ctx: &mut TxContext
+){
+    base_escrow::assert_only_taker(&immutables, ctx);
+
+    let timelocks = immutables::get_timelocks(&immutables);
+    let withdrawal_start = time_lock::get(timelocks, time_lock::get_src_withdrawal(timelocks));
+    let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+
+    base_escrow::assert_only_after(withdrawal_start, clock);
+    base_escrow::assert_only_before(cancellation_start, clock);
+
+    let caller = tx_context::sender(ctx);
+    withdrawal_to_internal(escrow, secret, caller, immutables, ctx);
 
 
 }
+
+fun withdrawal_to_internal<T>(escrow: &mut EscrowSrc<T>, secret: vector<u8>, target: address, immutables: Immutables, ctx: &mut TxContext){
+  assert!(!base_escrow::is_withdrawn(&escrow.base_escrow), EALREADY_WITHDRAWN);
+  assert!(!base_escrow::is_cancelled(&escrow.base_escrow), EALREADY_CANCELLED);
+
+  base_escrow::assert_valid_secret(&secret, &immutables);
+
+
+  base_escrow::set_withdrawn(&mut escrow.base_escrow, true);
+
+  let amount = immutables::get_amount(&immutables);
+  let token_balance = base_escrow::split_token_balance(&mut escrow.base_escrow, amount);
+
+  let token_coin = coin::from_balance(token_balance, ctx);
+  transfer::public_transfer(token_coin, target);
+
+  let caller = tx_context::sender(ctx);
+
+  let safety_deposit = immutables::get_safety_deposit(&immutables);
+
+
+  if (safety_deposit > 0) {
+    base_escrow::transfer_native_to_caller<T>(&mut escrow.base_escrow, safety_deposit, caller, ctx);
+
+  };
+  event::emit(EscrowWithdrawal {
+            escrow_id: object::uid_to_inner(&escrow.id),
+            secret,
+        });
+
+
+}}
