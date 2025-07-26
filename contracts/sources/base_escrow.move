@@ -119,5 +119,25 @@ module cross_chain_swap::base_escrow{
         assert!(balance > 0, EINSUFFIUCIENT_ACCESS_TOKEN);
     }
 
+    public fun rescue_funds<T>(escrow: &mut BaseEscrow<T>, token_address: address, amount: u64, immutables: Immutables, clock: &Clock, ctx: &mut TxContext) {
+        assert_only_taker(&immutables, ctx);
+        let rescue_start_time = time_lock::rescue_start(immutables::get_timelocks(&immutables), escrow.rescue_delay);
+        assert_only_after(rescue_start_time, clock);
+
+        let rescued_balance = balance::split(&mut escrow.token_balance, amount);
+        let rescued_coin = coin::from_balance(rescued_balance,ctx);
+
+        let caller_address = tx_context::sender(ctx);
+        transfer::public_transfer(rescued_coin, caller_address);
+
+        event::emit(FundRescued{
+            escrow_id: object::uid_to_inner(&escrow.id),
+            token: token_address,
+            amount
+        });    
+    }
+
+
+  
     
 }
