@@ -89,6 +89,28 @@ public fun withdraw<T>(
 
 }
 
+public fun withdraw_to<T>(
+        escrow: &mut EscrowSrc<T>,
+        secret: vector<u8>,
+        target: address,
+        immutables: Immutables,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        
+        base_escrow::assert_only_taker(&immutables, ctx);
+        let timelocks = immutables::get_timelocks(&immutables);
+        let withdrawal_start = time_lock::get(timelocks, time_lock::get_src_withdrawal(timelocks));
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+        
+         base_escrow::assert_only_after(withdrawal_start, clock);
+         base_escrow::assert_only_before(cancellation_start, clock);
+
+       
+        withdrawal_to_internal(escrow, secret, target, immutables, ctx);
+    }
+
+
 fun withdrawal_to_internal<T>(escrow: &mut EscrowSrc<T>, secret: vector<u8>, target: address, immutables: Immutables, ctx: &mut TxContext){
   assert!(!base_escrow::is_withdrawn(&escrow.base_escrow), EALREADY_WITHDRAWN);
   assert!(!base_escrow::is_cancelled(&escrow.base_escrow), EALREADY_CANCELLED);
