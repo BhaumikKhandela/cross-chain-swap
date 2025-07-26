@@ -97,7 +97,7 @@ module cross_chain_swap::base_escrow{
 
     // middlewares
 
-    fun assert_only_taker(immutables: &Immutables , ctx: &TxContext){
+       public fun assert_only_taker(immutables: &Immutables , ctx: &TxContext){
         let sender =tx_context::sender(ctx);
         let sender_bytes = address::to_bytes(sender);
         let taker = immutables::get_taker(immutables);
@@ -105,23 +105,23 @@ module cross_chain_swap::base_escrow{
         assert!(sender_bytes == *taker, EINVALID_CALLER);
 
     }
-    fun assert_valid_secret(secret: &vector<u8>, immutables: &Immutables){
+    public fun assert_valid_secret(secret: &vector<u8>, immutables: &Immutables){
         let secret_hash = keccak256(secret);
         let hashlock = immutables::get_hashlock(immutables);
         assert!(secret_hash == *hashlock, EINVALID_SECRET);
 
     }
-    fun assert_only_after(start_time: u64, clock: &Clock){
+    public fun assert_only_after(start_time: u64, clock: &Clock){
         let current_time = clock::timestamp_ms(clock)/1000;
         assert!(current_time >= start_time , EINVALID_TIME);
     }
 
-    fun assert_only_before(stop_time: u64, clock: &Clock){
+    public fun assert_only_before(stop_time: u64, clock: &Clock){
         let current_time = clock::timestamp_ms(clock)/1000;
         assert!(current_time < stop_time, EINVALID_TIME);
     }
 
-    fun assert_access_token_holder<AccessToken>(
+    public fun assert_access_token_holder<AccessToken>(
         access_cap: &AccessTokenCap<AccessToken>,
     ){
         let balance = balance::value(&access_cap.balance);
