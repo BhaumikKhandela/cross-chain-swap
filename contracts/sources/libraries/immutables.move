@@ -2,10 +2,10 @@ module libraries::immutables{
     
     use sui::hash;
     use sui::bcs;
-    use std::vector;
+   
 
-    use libraries::address_lib::{Self, Address};
-    use libraries::time_lock::{Self, Timelocks};
+    use libraries::address_lib:: {Address, get_address_bytes};
+    use libraries::time_lock:: Timelocks;
 
     // Immutable Structure 
 
@@ -49,13 +49,29 @@ module libraries::immutables{
             }
         }
 
-
+        // Function to hash immutables
         public fun hash(immutables: &Immutables): vector<u8>{
 
             let serialized = bcs::to_bytes(immutables);
             
             hash::keccak256(&serialized)
         }
+
+    
+        // Function to get taker address
+
+        public fun get_taker(immutables: &Immutables): &vector<u8> {
+            get_address_bytes(&immutables.taker)
+        }
+
+        // Function to get hashlock
+
+        public fun get_hashlock(immutables: &Immutables): &vector<u8> {
+            &immutables.hash_lock
+        }
+
+
+
 
 
 }
