@@ -46,9 +46,31 @@ module libraries::time_lock {
 
     // Get start time for rescue period
     public fun rescue_start(timelock: &Timelocks, rescue_delay: u64): u64 {
-        timelocks.deployed_at + rescue_delay
+       timelock.deployed_at + rescue_delay
     }
 
+    public fun get_src_withdrawal(timelock: &Timelocks): u64 {
+        timelock.src_withdrawal
+    }
+    public fun get_src_public_withdrawal(timelock: &Timelocks): u64 {
+        timelock.src_public_withdrawal
+    }
+    public fun get_src_cancellation(timelock: &Timelocks): u64 {
+        timelock.src_cancellation
+    }
+
+    public fun get_dst_withdrawal(timelock: &Timelocks): u64 {
+        timelock.dst_withdrawal
+    }
+
+    public fun get_dst_public_withdrawal(timelock: &Timelocks): u64 {
+        timelock.dst_public_withdrawal
+    }
+
+    public fun get_dst_cancellation(timelock: &Timelocks): u64 {
+        timelock.dst_cancellation
+    }
+    
 
     // Get time when a stage becomes active
     public fun get(timelock: &Timelocks, stage: u8): u64{
