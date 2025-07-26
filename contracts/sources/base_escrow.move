@@ -9,7 +9,7 @@ module cross_chain_swap::base_escrow{
     use sui::event;
     use sui::address;
     
-    use std::vector;
+    
     use std::option::{Self, Option};
 
     use libraries::time_lock::{Self, Timelocks};
@@ -32,6 +32,15 @@ module cross_chain_swap::base_escrow{
         amount: u64
     }
 
+    public struct TokenDeposited has copy, drop {
+        escrow_id: ID,
+        amount: u64,
+    }
+
+    public struct NativeTokenDeposited has copy, drop {
+        escrow_id: ID,
+        amount: u64,
+    }
     public struct EscrowWithdrawal has copy, drop {
         escrow_id: ID,
         secret: vector<u8>,
@@ -59,7 +68,7 @@ module cross_chain_swap::base_escrow{
         escrow_id: ID,
     }
 
-    public struct AccesTokenCap<phantom AccessToken> has key,store {
+    public struct AccessTokenCap<phantom AccessToken> has key,store {
         id: UID,
         balance: Balance<AccessToken>
     }
@@ -113,7 +122,7 @@ module cross_chain_swap::base_escrow{
     }
 
     fun assert_access_token_holder<AccessToken>(
-        access_cap: &AccesTokenCap<AccessToken>,
+        access_cap: &AccessTokenCap<AccessToken>,
     ){
         let balance = balance::value(&access_cap.balance);
         assert!(balance > 0, EINSUFFIUCIENT_ACCESS_TOKEN);
@@ -137,6 +146,30 @@ module cross_chain_swap::base_escrow{
         });    
     }
 
+
+    public fun deposit_tokens<T>(
+        escrow: &mut BaseEscrow<T>,
+        tokens: Coin<T>
+    ){
+     let token_balance = coin::into_balance(tokens);
+     let amount: u64 = balance::value(&token_balance);
+     balance::join(&mut escrow.token_balance, token_balance);
+     event::emit(TokenDeposited{
+        escrow_id: object::uid_to_inner(&escrow.id),
+        amount: amount
+     })
+    }
+
+    public fun deposit_native<T>(
+        escrow: &mut BaseEscrow<T>,
+        amount: u64
+    ) {
+        escrow.native_balance = escrow.native_balance + amount;
+        event::emit(NativeTokenDeposited{
+            escrow_id: object::uid_to_inner(&escrow.id),
+            amount: amount
+        })
+    }
 
   
     
