@@ -5,6 +5,7 @@ module cross_chain_swap::base_escrow{
     use sui::tx_context::{Self, TxContext};
     use sui::clock::{Self,Clock};
     use sui::coin::{Self, Coin};
+    use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::event;
     use sui::address;
@@ -41,20 +42,12 @@ module cross_chain_swap::base_escrow{
         escrow_id: ID,
         amount: u64,
     }
-    public struct EscrowWithdrawal has copy, drop {
-        escrow_id: ID,
-        secret: vector<u8>,
-    }
-
-    public struct EscrowCancelled has copy, drop {
-        escrow_id: ID
-    }
-
+    
     public struct BaseEscrow<phantom T> has key, store {
         id: UID,
 
         token_balance: Balance<T>,
-        native_balance: u64,
+        native_balance: Balance<SUI>,
 
         rescue_delay: u64,
         access_token_type: address,
@@ -80,7 +73,7 @@ module cross_chain_swap::base_escrow{
         let escrow = BaseEscrow<T> {
             id: escrow_id,
             token_balance: balance::zero<T>(),
-            native_balance: 0,
+            native_balance: balance::zero<SUI>(),
             rescue_delay,
             access_token_type,
             withdrawn: false,
@@ -93,6 +86,16 @@ module cross_chain_swap::base_escrow{
         };
 
         (escrow,cap)
+    }
+
+    public fun split_token_balance<T>(escrow: &mut BaseEscrow<T>, amount: u64): Balance<T> {
+        balance::split(&mut escrow.token_balance, amount)
+    }
+
+    public fun transfer_native_to_caller<T>(escrow: &mut BaseEscrow<T>, amount: u64, caller: address, ctx: &mut TxContext) {
+     let split = balance::split(&mut escrow.native_balance, amount);
+    let sui_coin = coin::from_balance(split, ctx);
+    transfer::public_transfer(sui_coin, caller);
     }
 
     // middlewares
@@ -136,12 +139,20 @@ module cross_chain_swap::base_escrow{
         escrow.cancelled
     }
 
+    public fun set_withdrawn<T>(escrow: &mut BaseEscrow<T>, withdrawn: bool) {
+        escrow.withdrawn = withdrawn
+    }
+
+    public fun set_cancelled<T>(escrow: &mut BaseEscrow<T>, cancelled: bool){
+        escrow.cancelled = cancelled
+    }
+
     public fun get_token_balance<T>(escrow: &BaseEscrow<T>): u64 {
         balance::value(&escrow.token_balance)
     }
 
     public fun get_native_balance<T>(escrow: &BaseEscrow<T>): u64 {
-        escrow.native_balance
+       balance::value(&escrow.native_balance)
     }
 
     public fun rescue_funds<T>(escrow: &mut BaseEscrow<T>, token_address: address, amount: u64, immutables: Immutables, clock: &Clock, ctx: &mut TxContext) {
@@ -178,13 +189,16 @@ module cross_chain_swap::base_escrow{
 
     public fun deposit_native<T>(
         escrow: &mut BaseEscrow<T>,
-        amount: u64
+        coin: Coin<SUI>
     ) {
-        escrow.native_balance = escrow.native_balance + amount;
-        event::emit(NativeTokenDeposited{
-            escrow_id: object::uid_to_inner(&escrow.id),
-            amount: amount
-        })
+        let amount = coin::value(&coin);
+    let native_balance = coin::into_balance(coin);
+    balance::join(&mut escrow.native_balance, native_balance);
+
+    event::emit(NativeTokenDeposited{
+        escrow_id: object::uid_to_inner(&escrow.id),
+        amount: amount
+    })
     }
 
   
