@@ -336,5 +336,44 @@ module cross_chain_swap::merkle_secret{
     }
     
 
+    public fun get_last_validated(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>,
+        merkle_root_shortened: vector<u8>
+    ): Option<ValidationData> {
+        let mut key = order_hash;
+        vector::append(&mut key, merkle_root_shortened);
+        
+        if (table::contains(&validator.last_validated, key)) {
+            option::some(*table::borrow(&validator.last_validated, key))
+        } else {
+            option::none()
+        }
+    }
+
+    public fun get_escrow_validation(
+        validator: &MerkleValidator,
+        escrow_id: ID
+    ): Option<ValidationData> {
+        if (table::contains(&validator.escrow_validations, escrow_id)) {
+            option::some(*table::borrow(&validator.escrow_validations, escrow_id))
+        } else {
+            option::none()
+        }
+    }
+
+    public fun get_order_escrows(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>
+    ): vector<ID> {
+        if (table::contains(&validator.order_to_escrows, order_hash)) {
+            *table::borrow(&validator.order_to_escrows, order_hash)
+        } else {
+            vector::empty<ID>()
+        }
+    }
+
+    
+
    
 }
