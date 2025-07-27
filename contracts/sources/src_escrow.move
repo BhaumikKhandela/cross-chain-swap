@@ -31,7 +31,7 @@ module cross_chain_swap::src_escrow{
     }
 
     public struct EscrowCancelled has copy, drop {
-        escrow_id: ID
+        escrow_id: ID,
     }
 
 
@@ -109,6 +109,61 @@ public fun withdraw_to<T>(
        
         withdrawal_to_internal(escrow, secret, target, immutables, ctx);
     }
+public fun public_withdraw<T, AccessToken>(
+        escrow: &mut EscrowSrc<T>,
+        secret: vector<u8>,
+        immutables: Immutables,
+        access_cap: &AccessTokenCap<AccessToken>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Validation
+        base_escrow::assert_access_token_holder(access_cap);
+        let timelocks = immutables::get_timelocks(&immutables);
+        let public_withdrawal_start = time_lock::get(timelocks, time_lock::get_src_public_withdrawal(timelocks));
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(public_withdrawal_start, clock);
+        base_escrow::assert_only_before(cancellation_start, clock);
+
+        // Withdraw to taker (not caller)
+        let taker_bytes = immutables::get_taker(&immutables);
+        let taker_address = address::from_bytes(*taker_bytes);
+        withdrawal_to_internal(escrow, secret, taker_address, immutables, ctx);
+    }
+
+public fun cancel<T>(
+        escrow: &mut EscrowSrc<T>,
+        immutables: Immutables,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Validation
+        base_escrow::assert_only_taker(&immutables, ctx);
+        let timelocks = immutables::get_timelocks(&immutables);
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(cancellation_start, clock);
+
+        cancel_internal(escrow, immutables, ctx);
+    }
+
+public fun public_cancel<T, AccessToken>(
+        escrow: &mut EscrowSrc<T>,
+        immutables: Immutables,
+        access_cap: &AccessTokenCap<AccessToken>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Validation
+        base_escrow::assert_access_token_holder(access_cap);
+        let timelocks = immutables::get_timelocks(&immutables);
+        let public_cancellation_start = time_lock::get(timelocks, time_lock::get_src_public_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(public_cancellation_start, clock);
+
+        cancel_internal(escrow, immutables, ctx);
+    }
 
 
 fun withdrawal_to_internal<T>(escrow: &mut EscrowSrc<T>, secret: vector<u8>, target: address, immutables: Immutables, ctx: &mut TxContext){
@@ -141,4 +196,46 @@ fun withdrawal_to_internal<T>(escrow: &mut EscrowSrc<T>, secret: vector<u8>, tar
         });
 
 
-}}
+}
+fun cancel_internal<T>(
+        escrow: &mut EscrowSrc<T>,
+        immutables: Immutables,
+        ctx: &mut TxContext
+    ) {
+        // Validation
+        assert!(!base_escrow::is_withdrawn(&escrow.base_escrow), EALREADY_WITHDRAWN);
+        assert!(!!base_escrow::is_cancelled(&escrow.base_escrow), EALREADY_CANCELLED);
+       
+
+        // Mark as cancelled
+       base_escrow::set_cancelled(&mut escrow.base_escrow, true);
+
+
+        // Transfer ERC20-like tokens back to maker
+        let maker_bytes = immutables::get_maker(&immutables);
+        let maker_address = address::from_bytes(*maker_bytes);
+        let amount = immutables::get_amount(&immutables);
+        let token_balance =  base_escrow::split_token_balance(&mut escrow.base_escrow, amount);
+        let token_coin = coin::from_balance(token_balance, ctx);
+        transfer::public_transfer(token_coin, maker_address);
+
+        // Transfer safety deposit (native tokens) to caller
+        let caller = tx_context::sender(ctx);
+        let safety_deposit = immutables::get_safety_deposit(&immutables);
+        if (safety_deposit > 0) {
+           
+             base_escrow::transfer_native_to_caller<T>(&mut escrow.base_escrow, safety_deposit, caller, ctx);
+            
+        };
+
+        // Emit event
+        event::emit(EscrowCancelled {
+            escrow_id: object::uid_to_inner(&escrow.id),
+        });
+    }
+
+
+
+
+
+}
