@@ -234,6 +234,10 @@ fun cancel_internal<T>(
         });
     }
 
+    public fun get_base_escrow<T>(escrow: &EscrowSrc<T>): &BaseEscrow<T> {
+        &escrow.base_escrow
+    }
+
 
 
 
