@@ -172,6 +172,49 @@ module cross_chain_swap::merkle_secret{
     }
 
 
+    public fun validate_progressive_secrets(
+        validator: &mut MerkleValidator,
+        order_hash: vector<u8>,
+        merkle_root_shortened: vector<u8>,
+        secrets_and_proofs: vector<SecretWithProof>,
+        escrow_id: ID,
+    ): bool {
+        let secrets_count = vector::length(&secrets_and_proofs);
+        assert!(secrets_count > 0, EINVALID_PROGRESSIVE_SECRETS);
+
+        let mut i = 0;
+        let mut secret_indices = vector::empty<u64>();
+        
+        while (i < secrets_count) {
+            let secret_data = vector::borrow(&secrets_and_proofs, i);
+            
+            // Validate each secret in sequence
+            let valid = validate_for_escrow(
+                validator,
+                escrow_id,
+                order_hash,
+                merkle_root_shortened,
+                secret_data.index,
+                secret_data.secret_hash,
+                secret_data.merkle_proof,
+            );
+            
+            assert!(valid, EINVALID_PROGRESSIVE_SECRETS);
+            vector::push_back(&mut secret_indices, secret_data.index);
+            
+            i = i + 1;
+        };
+
+        event::emit(ProgressiveSecretsValidated {
+            order_hash,
+            secret_indices,
+            escrow_id,
+        });
+
+        true
+    }
+
+
     fun verify_merkle_proof_1inch_style(
         leaf_hash: vector<u8>,
         index: u64,
