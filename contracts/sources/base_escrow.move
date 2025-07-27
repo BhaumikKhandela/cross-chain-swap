@@ -98,6 +98,16 @@ module cross_chain_swap::base_escrow{
     transfer::public_transfer(sui_coin, caller);
     }
 
+    public fun create_access_token_cap<AccessToken>(
+        tokens: Coin<AccessToken>,
+        ctx: &mut TxContext
+    ): AccessTokenCap<AccessToken> {
+        AccessTokenCap<AccessToken> {
+            id: object::new(ctx),
+            balance: coin::into_balance(tokens),
+        }
+    }
+
     // middlewares
 
        public fun assert_only_taker(immutables: &Immutables , ctx: &TxContext){
