@@ -86,4 +86,71 @@ module cross_chain_swap::partial_fill_orders{
         }
     }
 
+
+    public fun validate_partial_fill(
+        order: &PartialFillOrder,
+        making_amount: u64,
+        secret_index: u64,
+        validator: &MerkleValidator,
+    ): bool {
+        // Basic validations
+        if (!order.multiple_fills_allowed) {
+            return making_amount == order.total_making_amount
+        };
+
+        if (making_amount == 0 || making_amount > order.remaining_making_amount) {
+            return false
+        };
+
+        // Check if secret index was already used
+        if (vector::contains(&order.used_secret_indices, &secret_index)) {
+            return false
+        };
+
+        // Check if secret was already revealed globally
+        if (merkle_secret::is_secret_revealed(validator, order.order_hash, secret_index)) {
+            return false
+        };
+
+        // Validate against 1inch partial fill logic
+        is_valid_partial_fill_1inch_style(
+            making_amount,
+            order.remaining_making_amount,
+            order.total_making_amount,
+            order.parts_amount,
+            secret_index
+        )
+    }
+
+    fun is_valid_partial_fill_1inch_style(
+        making_amount: u64,
+        remaining_making_amount: u64,
+        order_making_amount: u64,
+        parts_amount: u64,
+        secret_index: u64
+    ): bool {
+        // Calculate fill index based on current progress
+        let filled_amount = order_making_amount - remaining_making_amount;
+        let new_filled_amount = filled_amount + making_amount;
+        
+        // Calculate expected secret index for this fill level
+        let calculated_index = if (new_filled_amount == order_making_amount) {
+            // Complete fill - use parts_amount as final index
+            parts_amount
+        } else {
+            // Partial fill - calculate based on percentage
+            ((new_filled_amount * parts_amount) / order_making_amount)
+        };
+
+        // Validate against expected secret index
+        if (remaining_making_amount == making_amount) {
+            // Order filled to completion
+            return secret_index == parts_amount || secret_index == calculated_index
+        };
+
+        // For partial fills, secret index should match calculated threshold
+        secret_index == calculated_index || secret_index + 1 == calculated_index
+    }
+
+
 }
