@@ -373,7 +373,27 @@ module cross_chain_swap::merkle_secret{
         }
     }
 
-    
+    public fun is_secret_revealed(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>,
+        secret_index: u64
+    ): bool {
+        let secret_key = create_secret_key(order_hash, secret_index);
+        table::contains(&validator.revealed_secrets, secret_key)
+    }
+
+    public fun get_escrow_count_for_order(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>
+    ): u64 {
+        if (table::contains(&validator.order_to_escrows, order_hash)) {
+            let escrow_list = table::borrow(&validator.order_to_escrows, order_hash);
+            vector::length(escrow_list)
+        } else {
+            0
+        }
+    }
+
 
    
 }
