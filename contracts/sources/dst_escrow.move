@@ -81,6 +81,31 @@ module cross_chain_swap::dst_escrow{
         withdraw_to_internal(escrow, secret, caller, immutables, ctx);
     }
 
+
+    public fun withdraw_to<T>(
+        escrow: &mut EscrowDst<T>,
+        secret: vector<u8>,
+        target: address,
+        immutables: Immutables,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Validate caller is maker
+        assert_only_maker(&immutables, ctx);
+        
+        // Check time constraints - must be in private withdrawal period
+        let timelocks = immutables::get_timelocks(&immutables);
+        let withdrawal_start = time_lock::get(timelocks, time_lock::get_dst_withdrawal(timelocks));
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(withdrawal_start, clock);
+        base_escrow::assert_only_before(cancellation_start, clock);
+
+        // Withdraw to specified target
+        withdraw_to_internal(escrow, secret, target, immutables, ctx);
+    }
+
+
     fun assert_only_maker(immutables: &Immutables, ctx: &TxContext) {
         let sender = tx_context::sender(ctx);
         let sender_bytes = address::to_bytes(sender);
