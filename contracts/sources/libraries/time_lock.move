@@ -11,7 +11,7 @@ module libraries::time_lock {
         dst_withdrawal: u64,
         dst_public_withdrawal: u64,
         dst_cancellation: u64,
-
+        dst_public_cancellation: u64,
         // Deploy timestamp (when escrow was created)
         deployed_at: u64
     }
@@ -26,7 +26,7 @@ module libraries::time_lock {
 
     // To create timelock
     public fun create_timelock (src_withdrawal: u64,src_public_withdrawal: u64,src_cancellation: u64,src_public_cancellation: u64,
-    dst_withdrawal: u64,dst_public_withdrawal: u64,dst_cancellation: u64,): Timelocks {
+    dst_withdrawal: u64,dst_public_withdrawal: u64,dst_cancellation: u64, dst_public_cancellation: u64): Timelocks {
        Timelocks {
         src_withdrawal,
         src_public_withdrawal,
@@ -35,6 +35,7 @@ module libraries::time_lock {
         dst_withdrawal,
         dst_public_withdrawal,
         dst_cancellation,
+        dst_public_cancellation,
         deployed_at: 0
        }
     }
@@ -59,6 +60,10 @@ module libraries::time_lock {
         timelock.src_cancellation
     }
 
+    public fun get_src_public_cancellation(timelock: &Timelocks): u64 {
+        timelock.src_public_cancellation
+    }
+
     public fun get_dst_withdrawal(timelock: &Timelocks): u64 {
         timelock.dst_withdrawal
     }
@@ -69,6 +74,10 @@ module libraries::time_lock {
 
     public fun get_dst_cancellation(timelock: &Timelocks): u64 {
         timelock.dst_cancellation
+    }
+
+    public fun get_dst_public_cancellation(timelock: &Timelocks): u64 {
+        timelock.dst_public_cancellation
     }
 
 
