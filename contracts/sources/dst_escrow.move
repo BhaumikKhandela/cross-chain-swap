@@ -196,6 +196,25 @@ module cross_chain_swap::dst_escrow{
         cancel_internal(escrow, immutables, ctx);
     }
 
+    public fun public_cancel<T, AccessToken>(
+        escrow: &mut EscrowDst<T>,
+        immutables: Immutables,
+        access_cap: &AccessTokenCap<AccessToken>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Validate caller has access tokens
+        base_escrow::assert_access_token_holder(access_cap);
+        
+        // Check time constraints - must be in public cancellation period
+        let timelocks = immutables::get_timelocks(&immutables);
+        let public_cancellation_start = time_lock::get(timelocks, time_lock::get_dst_public_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(public_cancellation_start, clock);
+
+        cancel_internal(escrow, immutables, ctx);
+    }
+
     fun cancel_internal<T>(
         escrow: &mut EscrowDst<T>,
         immutables: Immutables,
