@@ -229,4 +229,58 @@ module cross_chain_swap::partial_fill_orders{
         }
     }
 
+
+    public fun get_remaining_amount(order: &PartialFillOrder): u64 {
+        order.remaining_making_amount
+    }
+
+    public fun get_total_amount(order: &PartialFillOrder): u64 {
+        order.total_making_amount
+    }
+
+    public fun is_completed(order: &PartialFillOrder): bool {
+        order.remaining_making_amount == 0
+    }
+
+    public fun get_parts_amount(order: &PartialFillOrder): u64 {
+        order.parts_amount
+    }
+
+    public fun get_order_hash(order: &PartialFillOrder): &vector<u8> {
+        &order.order_hash
+    }
+
+    public fun get_merkle_root(order: &PartialFillOrder): &vector<u8> {
+        &order.merkle_root_shortened
+    }
+
+    public fun get_fill_record(order: &PartialFillOrder, secret_index: u64): Option<FillRecord> {
+        if (table::contains(&order.completed_fills, secret_index)) {
+            option::some(*table::borrow(&order.completed_fills, secret_index))
+        } else {
+            option::none()
+        }
+    }
+
+    public fun get_total_fills_count(order: &PartialFillOrder): u64 {
+        order.total_fills_count
+    }
+
+    public fun is_secret_used(order: &PartialFillOrder, secret_index: u64): bool {
+        vector::contains(&order.used_secret_indices, &secret_index)
+    }
+
+    public fun get_used_secret_indices(order: &PartialFillOrder): &vector<u64> {
+        &order.used_secret_indices
+    }
+
+    public fun get_fill_percentage(order: &PartialFillOrder): u64 {
+        if (order.total_making_amount == 0) {
+            return 0
+        };
+        let filled_amount = order.total_making_amount - order.remaining_making_amount;
+        (filled_amount * 100) / order.total_making_amount
+    }
+
+
 }
