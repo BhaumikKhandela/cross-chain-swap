@@ -74,6 +74,17 @@ module libraries::immutables{
             &immutables.timelocks
         }
         
+        public fun get_amount(immutables: &Immutables): u64 {
+            immutables.amount
+        }
+
+        public fun get_safety_deposit(immutables: &Immutables): u64 {
+            immutables.safety_deposit
+        }
+
+        public fun get_maker(immutables: &Immutables): &vector<u8> {
+            get_address_bytes(&immutables.taker)
+        }
 
 
 
