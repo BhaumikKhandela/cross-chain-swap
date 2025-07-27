@@ -58,4 +58,72 @@ module cross_chain_swap::dst_escrow{
         (escrow_dst, escrow_cap)
     }
 
+    public fun withdraw<T>(
+        escrow: &mut EscrowDst<T>,
+        secret: vector<u8>,
+        immutables: Immutables,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+     
+        assert_only_maker(&immutables, ctx);
+        
+        
+        let timelocks = immutables::get_timelocks(&immutables);
+        let withdrawal_start = time_lock::get(timelocks, time_lock::get_dst_withdrawal(timelocks));
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(withdrawal_start, clock);
+        base_escrow::assert_only_before(cancellation_start, clock);
+
+        
+        let caller = tx_context::sender(ctx);
+        withdraw_to_internal(escrow, secret, caller, immutables, ctx);
+    }
+
+    fun assert_only_maker(immutables: &Immutables, ctx: &TxContext) {
+        let sender = tx_context::sender(ctx);
+        let sender_bytes = address::to_bytes(sender);
+        let maker = immutables::get_maker(immutables);
+        
+        assert!(sender_bytes == *maker, EINVALID_CALLER);
+    }
+
+    fun withdraw_to_internal<T>(
+        escrow: &mut EscrowDst<T>,
+        secret: vector<u8>,
+        target: address,
+        immutables: Immutables,
+        ctx: &mut TxContext
+    ) {
+        
+        assert!(!base_escrow::is_withdrawn(&escrow.base_escrow), EALREADY_WITHDRAWN);
+        assert!(!base_escrow::is_cancelled(&escrow.base_escrow), EALREADY_CANCELLED);
+        
+        
+        base_escrow::assert_valid_secret(&secret, &immutables);
+
+        
+        base_escrow::set_withdrawn(&mut escrow.base_escrow, true);
+
+       
+        let amount = immutables::get_amount(&immutables);
+        let token_balance = base_escrow::split_token_balance(&mut escrow.base_escrow, amount);
+        let token_coin = coin::from_balance(token_balance, ctx);
+        transfer::public_transfer(token_coin, target);
+
+       
+        let caller = tx_context::sender(ctx);
+        let safety_deposit = immutables::get_safety_deposit(&immutables);
+        if (safety_deposit > 0) {
+            base_escrow::transfer_native_to_caller(&mut escrow.base_escrow, safety_deposit, caller, ctx);
+        };
+
+        
+        event::emit(EscrowWithdrawal {
+            escrow_id: object::uid_to_inner(&escrow.id),
+            secret,
+        });
+    }
+
 }
