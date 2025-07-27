@@ -211,6 +211,8 @@ module cross_chain_swap::base_escrow{
     })
     }
 
-  
+  public fun get_escrow_id<T>(escrow: &BaseEscrow<T>): ID {
+    object::uid_to_inner(&escrow.id)  // Use reference to id
+}
     
 }
