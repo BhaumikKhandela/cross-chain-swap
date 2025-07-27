@@ -247,6 +247,9 @@ module cross_chain_swap::dst_escrow{
             escrow_id: object::uid_to_inner(&escrow.id),
         });
     }
-
+    
+    public fun get_base_escrow<T>(escrow: &EscrowDst<T>): &BaseEscrow<T> {
+        &escrow.base_escrow
+    }
 
 }
