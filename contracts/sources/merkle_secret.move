@@ -213,7 +213,27 @@ module cross_chain_swap::merkle_secret{
 
         true
     }
+    
+    public fun validate_secret_sequence(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>,
+        merkle_root_shortened: vector<u8>,
+        current_secret_index: u64,
+    ): bool {
+        let mut validation_key = order_hash;
+        vector::append(&mut validation_key, merkle_root_shortened);
+        
+        if (!table::contains(&validator.last_validated, validation_key)) {
+            // First secret must be index 0
+            return current_secret_index == 0
+        };
 
+        let last_validation = table::borrow(&validator.last_validated, validation_key);
+        // Current secret index should be next in sequence or same (for multiple boundary crossing)
+        current_secret_index >= last_validation.index
+    }
+
+  
 
     fun verify_merkle_proof_1inch_style(
         leaf_hash: vector<u8>,
