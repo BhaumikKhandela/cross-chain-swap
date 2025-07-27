@@ -64,6 +64,14 @@ module libraries::immutables{
             get_address_bytes(&immutables.taker)
         }
 
+        public fun get_taker_address(immutables : &Immutables): &Address {
+            &immutables.taker
+        }
+
+        public fun get_maker_address(immutables: &Immutables): &Address {
+            &immutables.maker
+        }
+
         // Function to get hashlock
 
         public fun get_hashlock(immutables: &Immutables): &vector<u8> {
@@ -85,7 +93,14 @@ module libraries::immutables{
         public fun get_maker(immutables: &Immutables): &vector<u8> {
             get_address_bytes(&immutables.taker)
         }
+        
+        public fun get_order_hash(immutables : &Immutables): &vector<u8> {
+            &immutables.order_hash
+        }
 
+        public fun get_token_address(immutables: &Immutables): &Address {
+          &immutables.token
+        }
 
 
 
