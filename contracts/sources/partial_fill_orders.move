@@ -206,4 +206,27 @@ module cross_chain_swap::partial_fill_orders{
             });
         };
     }
+
+    public fun get_fill_progress(order: &PartialFillOrder): OrderFillProgress {
+        let filled_amount = order.total_making_amount - order.remaining_making_amount;
+        let current_fill_index = if (order.total_making_amount == 0) {
+            0
+        } else {
+            (filled_amount * order.parts_amount) / order.total_making_amount
+        };
+
+        let next_expected_secret_index = if (order.remaining_making_amount == 0) {
+            order.parts_amount // Order completed
+        } else {
+            current_fill_index + 1
+        };
+
+        OrderFillProgress {
+            filled_amount,
+            remaining_amount: order.remaining_making_amount,
+            current_fill_index,
+            next_expected_secret_index,
+        }
+    }
+
 }
