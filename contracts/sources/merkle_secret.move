@@ -64,8 +64,161 @@ module cross_chain_swap::merkle_secret{
         }
     }
 
-    
+    public fun validate_merkle_proof(
+        validator: &mut MerkleValidator,
+        order_hash: vector<u8>,
+        merkle_root_shortened: vector<u8>, // First 30 bytes of merkle root
+        secret_index: u64,
+        secret_hash: vector<u8>,
+        merkle_proof: vector<vector<u8>>,
+    ): bool {
+        // Check if secret was already revealed
+        let secret_key = create_secret_key(order_hash, secret_index);
+        assert!(!table::contains(&validator.revealed_secrets, secret_key), ESECRET_ALREADY_REVEALED);
 
+        // Reconstruct merkle root from proof using 1inch-compatible encoding
+        let calculated_root = verify_merkle_proof_1inch_style(
+            secret_hash,
+            secret_index,
+            merkle_proof
+        );
+
+        // Compare first 30 bytes (240 bits) of calculated root
+        let calculated_shortened = extract_shortened_root(calculated_root);
+        assert!(calculated_shortened == merkle_root_shortened, EINVALID_PROOF);
+
+        // Mark secret as revealed
+        table::add(&mut validator.revealed_secrets, secret_key, true);
+
+        // Create validation key for order-level tracking
+        let mut validation_key = order_hash;
+        vector::append(&mut validation_key, merkle_root_shortened);
+
+        // Update validation data
+        let validation_data = ValidationData {
+            index: secret_index,
+            secret_hash,
+            escrow_id: option::none(),
+        };
+
+        // Update or add validation data
+        if (table::contains(&validator.last_validated, validation_key)) {
+            let existing_data = table::borrow_mut(&mut validator.last_validated, validation_key);
+            *existing_data = validation_data;
+        } else {
+            table::add(&mut validator.last_validated, validation_key, validation_data);
+        };
+
+        event::emit(SecretRevealed {
+            order_hash,
+            index: secret_index,
+            secret_hash,
+            escrow_id: option::none(),
+        });
+
+        true
+    }
+
+
+    fun verify_merkle_proof_1inch_style(
+        leaf_hash: vector<u8>,
+        index: u64,
+        proof: vector<vector<u8>>
+    ): vector<u8> {
+        // Create leaf using 1inch's encoding: keccak256(index || secret_hash)
+        let leaf = encode_leaf_1inch_style(index, leaf_hash);
+        let mut current_hash = keccak256(&leaf);
+        let mut current_index = index;
+        
+        let proof_length = vector::length(&proof);
+        let mut i = 0;
+        
+        while (i < proof_length) {
+            let proof_element = *vector::borrow(&proof, i);
+            
+            if (current_index % 2 == 0) {
+                // Current node is left child
+                current_hash = keccak256(&combine_hashes(current_hash, proof_element));
+            } else {
+                // Current node is right child  
+                current_hash = keccak256(&combine_hashes(proof_element, current_hash));
+            };
+            
+            current_index = current_index / 2;
+            i = i + 1;
+        };
+        
+        current_hash
+    }
+
+
+    fun encode_leaf_1inch_style(index: u64, hash: vector<u8>): vector<u8> {
+        let mut encoded = vector::empty<u8>();
+        
+        // Encode index as 32 bytes (big-endian) to match 1inch
+        let index_bytes = encode_u64_big_endian(index);
+        vector::append(&mut encoded, index_bytes);
+        
+        // Append secret hash
+        vector::append(&mut encoded, hash);
+        
+        encoded
+    }
+
+    fun encode_u64_big_endian(value: u64): vector<u8> {
+        let mut encoded = vector::empty<u8>();
+        
+        // Fill with zeros for the first 24 bytes (32 - 8 = 24)
+        let mut i = 0;
+        while (i < 24) {
+            vector::push_back(&mut encoded, 0u8);
+            i = i + 1;
+        };
+        
+        // Encode the u64 value in big-endian (most significant byte first)
+        let mut temp_value = value;
+        let mut value_bytes = vector::empty<u8>();
+        i = 0;
+        while (i < 8) {
+            vector::push_back(&mut value_bytes, ((temp_value % 256) as u8));
+            temp_value = temp_value / 256;
+            i = i + 1;
+        };
+        
+        // Reverse for big-endian
+        vector::reverse(&mut value_bytes);
+        vector::append(&mut encoded, value_bytes);
+        
+        encoded
+    }
+
+    fun combine_hashes(left: vector<u8>, right: vector<u8>): vector<u8> {
+        let mut combined = left;
+        vector::append(&mut combined, right);
+        combined
+    }
+
+
+    fun extract_shortened_root(root: vector<u8>): vector<u8> {
+        let mut shortened = vector::empty<u8>();
+        let mut i = 0;
+        let root_length = vector::length(&root);
+        let extract_length = if (root_length < 30) root_length else 30;
+        
+        while (i < extract_length) {
+            vector::push_back(&mut shortened, *vector::borrow(&root, i));
+            i = i + 1;
+        };
+        
+        shortened
+    }
+
+    fun create_secret_key(order_hash: vector<u8>, secret_index: u64): vector<u8> {
+        let mut key = order_hash;
+        let index_bytes = encode_u64_big_endian(secret_index);
+        vector::append(&mut key, index_bytes);
+        keccak256(&key)
+    }
     
 
    
