@@ -151,4 +151,30 @@ module cross_chain_swap::dst_escrow{
         });
     }
 
+
+    public fun public_withdraw<T, AccessToken>(
+        escrow: &mut EscrowDst<T>,
+        secret: vector<u8>,
+        immutables: Immutables,
+        access_cap: &AccessTokenCap<AccessToken>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        
+        base_escrow::assert_access_token_holder(access_cap);
+        
+        
+        let timelocks = immutables::get_timelocks(&immutables);
+        let public_withdrawal_start = time_lock::get(timelocks, time_lock::get_dst_public_withdrawal(timelocks));
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(public_withdrawal_start, clock);
+        base_escrow::assert_only_before(cancellation_start, clock);
+
+        // Withdraw to maker (not caller) - funds always go to the intended maker
+        let maker_bytes = immutables::get_maker(&immutables);
+        let maker_address = address::from_bytes(*maker_bytes);
+        withdraw_to_internal(escrow, secret, maker_address, immutables, ctx);
+    }
+
 }
