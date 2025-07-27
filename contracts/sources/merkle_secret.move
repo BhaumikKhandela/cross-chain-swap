@@ -192,6 +192,31 @@ module cross_chain_swap::merkle_secret{
 
     
 
+    public fun get_validation_data(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>,
+        hashlock_info: vector<u8>
+    ): Option<ValidationData> {
+        let mut validation_key = order_hash;
+        vector::append(&mut validation_key, hashlock_info);
+        let key = keccak256(&validation_key);
+        
+        if (table::contains(&validator.last_validated, key)) {
+            option::some(*table::borrow(&validator.last_validated, key))
+        } else {
+            option::none()
+        }
+    }
+
+    /// Check if a secret has been revealed
+    public fun is_secret_revealed(
+        validator: &MerkleValidator,
+        order_hash: vector<u8>,
+        secret_index: u64
+    ): bool {
+        let secret_key = create_secret_key(order_hash, secret_index);
+        table::contains(&validator.revealed_secrets, secret_key)
+    }
 
    
 }
