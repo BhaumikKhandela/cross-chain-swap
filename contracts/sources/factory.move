@@ -17,6 +17,7 @@ module cross_chain_swap::factory{
     use cross_chain_swap::dst_escrow::{Self, EscrowDst};
     use libraries::time_lock::{Self, Timelocks};
     use libraries::immutables::{Self, Immutables};
+    use sui::sui::SUI;
 
     const EINVALID_CALLER: u64 = 1;
     const EESCROW_ALREADY_EXISTS: u64 = 2;
@@ -45,9 +46,7 @@ module cross_chain_swap::factory{
         rescue_delay: u64,
         access_token_type: address,
         
-        // Registry of deployed escrows (optional - for tracking)
-        src_escrows: Table<vector<u8>, ID>,  // immutables_hash -> escrow_id
-        dst_escrows: Table<vector<u8>, ID>,  // immutables_hash -> escrow_id
+       
         
         // Statistics
         total_src_escrows: u64,
@@ -72,8 +71,6 @@ module cross_chain_swap::factory{
             id: factory_id,
             rescue_delay,
             access_token_type,
-            src_escrows: table::new<vector<u8>, ID>(ctx),
-            dst_escrows: table::new<vector<u8>, ID>(ctx),
             total_src_escrows: 0,
             total_dst_escrows: 0,
         };
@@ -85,5 +82,63 @@ module cross_chain_swap::factory{
 
         (factory, cap)
     }
+
+
+    public fun create_src_escrow<T>(
+        factory: &mut EscrowFactory,
+        immutables: Immutables,
+        initial_tokens: Coin<T>,
+        safety_deposit: Coin<SUI>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): (EscrowSrc<T>, EscrowCap) {
+        // Set deployment timestamp in timelocks
+        let current_time = clock::timestamp_ms(clock) / 1000;
+        let mut timelocks = *immutables::get_timelocks(&immutables);
+        time_lock::set_deploy_timestamp(&mut timelocks, current_time);
+        
+        // Update immutables with deployment time
+        let updated_immutables = immutables::new(
+    *immutables::get_order_hash(&immutables),
+    *immutables::get_hashlock(&immutables),
+    *immutables::get_maker_address(&immutables),
+    *immutables::get_taker_address(&immutables),
+    *immutables::get_token_address(&immutables),
+    immutables::get_amount(&immutables),
+    immutables::get_safety_deposit(&immutables),
+    timelocks,
+
+);
+
+        // Create the source escrow
+        let (escrow, escrow_cap) = src_escrow::new<T>(
+            factory.rescue_delay,
+            factory.access_token_type,
+            initial_tokens,
+            safety_deposit,
+            ctx
+        );
+
+       
+       
+        let base_escrow_reference = src_escrow::get_base_escrow(&escrow);
+        
+        let escrow_id = base_escrow::get_escrow_id(base_escrow_reference);
+
+        
+        // Update statistics
+        factory.total_src_escrows = factory.total_src_escrows + 1;
+
+        // Emit creation event
+        event::emit(SrcEscrowCreated {
+            escrow_id,
+            factory_id: object::uid_to_inner(&factory.id),
+            immutables: updated_immutables,
+            deployer: tx_context::sender(ctx),
+        });
+
+        (escrow, escrow_cap)
+    }
+
 
 }
