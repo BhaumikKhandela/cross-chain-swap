@@ -153,4 +153,57 @@ module cross_chain_swap::partial_fill_orders{
     }
 
 
+    public fun execute_partial_fill_with_escrow(
+        order: &mut PartialFillOrder,
+        making_amount: u64,
+        secret_index: u64,
+        escrow_id: ID,
+        validator: &MerkleValidator,
+        timestamp: u64,
+    ) {
+        assert!(
+            validate_partial_fill(order, making_amount, secret_index, validator), 
+            EINVALID_PARTIAL_FILL
+        );
+        assert!(making_amount <= order.remaining_making_amount, EINVALID_FILL_AMOUNT);
+        assert!(!vector::contains(&order.used_secret_indices, &secret_index), ESECRET_INDEX_USED);
+
+        // Update order state
+        order.remaining_making_amount = order.remaining_making_amount - making_amount;
+        let accumulated_fill = order.total_making_amount - order.remaining_making_amount;
+
+        // Record the fill
+        let fill_record = FillRecord {
+            fill_amount: making_amount,
+            secret_index,
+            fill_sequence: order.total_fills_count,
+            escrow_id: option::some(escrow_id),
+            timestamp,
+            accumulated_fill,
+        };
+
+        table::add(&mut order.completed_fills, secret_index, fill_record);
+        vector::push_back(&mut order.used_secret_indices, secret_index);
+        order.total_fills_count = order.total_fills_count + 1;
+
+        // Emit appropriate event
+        if (order.remaining_making_amount == 0) {
+            event::emit(OrderFullyCompleted {
+                order_hash: order.order_hash,
+                total_amount: order.total_making_amount,
+                total_fills: order.total_fills_count,
+                final_escrow_id: escrow_id,
+            });
+        } else {
+            event::emit(PartialFillCompleted {
+                order_hash: order.order_hash,
+                fill_amount: making_amount,
+                secret_index,
+                fill_sequence: order.total_fills_count - 1,
+                escrow_id,
+                remaining_amount: order.remaining_making_amount,
+                accumulated_fill,
+            });
+        };
+    }
 }
