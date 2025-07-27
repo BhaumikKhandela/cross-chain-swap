@@ -27,7 +27,7 @@ module cross_chain_swap::merkle_secret{
         merkle_proof: vector<vector<u8>>,
     }
 
-    public struct MerkleValidator has key {
+    public struct MerkleValidator has key , store {
         id: UID,
         // Per-order validation tracking (maintains backward compatibility)
         last_validated: Table<vector<u8>, ValidationData>,
