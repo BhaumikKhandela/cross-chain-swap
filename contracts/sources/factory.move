@@ -140,5 +140,61 @@ module cross_chain_swap::factory{
         (escrow, escrow_cap)
     }
 
+    public fun create_dst_escrow<T>(
+        factory: &mut EscrowFactory,
+        immutables: Immutables,
+        initial_tokens: Coin<T>,
+        safety_deposit: Coin<SUI>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): (EscrowDst<T>, EscrowCap) {
+       
+        let current_time = clock::timestamp_ms(clock) / 1000;
+        let mut timelocks = *immutables::get_timelocks(&immutables);
+        time_lock::set_deploy_timestamp(&mut timelocks, current_time);
+        
+       
+        let updated_immutables = immutables::new(
+            *immutables::get_order_hash(&immutables),
+            *immutables::get_hashlock(&immutables),
+            *immutables::get_maker_address(&immutables), 
+            *immutables::get_taker_address(&immutables), 
+            *immutables::get_token_address(&immutables), 
+            immutables::get_amount(&immutables),
+            immutables::get_safety_deposit(&immutables),
+            timelocks,
+        );
+
+     
+        let (escrow, escrow_cap) = dst_escrow::new<T>(
+            factory.rescue_delay,
+            factory.access_token_type,
+            initial_tokens,
+            safety_deposit,
+            ctx
+        );
+
+      
+        
+       let base_escrow_reference = dst_escrow::get_base_escrow(&escrow);
+       let escrow_id = base_escrow::get_escrow_id(base_escrow_reference);
+
+        
+        
+        // Update statistics
+        factory.total_dst_escrows = factory.total_dst_escrows + 1;
+
+        // Emit creation event
+        event::emit(DstEscrowCreated {
+            escrow_id,
+            factory_id: object::uid_to_inner(&factory.id),
+            immutables: updated_immutables,
+            deployer: tx_context::sender(ctx),
+        });
+
+        (escrow, escrow_cap)
+    }
+
+
 
 }
