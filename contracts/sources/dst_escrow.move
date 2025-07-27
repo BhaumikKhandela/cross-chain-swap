@@ -177,4 +177,57 @@ module cross_chain_swap::dst_escrow{
         withdraw_to_internal(escrow, secret, maker_address, immutables, ctx);
     }
 
+
+    public fun cancel<T>(
+        escrow: &mut EscrowDst<T>,
+        immutables: Immutables,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        // Validate caller is taker (they can cancel to get their deposited funds back)
+        base_escrow::assert_only_taker(&immutables, ctx);
+        
+        
+        let timelocks = immutables::get_timelocks(&immutables);
+        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        
+        base_escrow::assert_only_after(cancellation_start, clock);
+
+        cancel_internal(escrow, immutables, ctx);
+    }
+
+    fun cancel_internal<T>(
+        escrow: &mut EscrowDst<T>,
+        immutables: Immutables,
+        ctx: &mut TxContext
+    ) {
+        
+        assert!(!base_escrow::is_withdrawn(&escrow.base_escrow), EALREADY_WITHDRAWN);
+        assert!(!base_escrow::is_cancelled(&escrow.base_escrow), EALREADY_CANCELLED);
+
+        
+        base_escrow::set_cancelled(&mut escrow.base_escrow, true);
+
+        // Transfer tokens back to taker (who originally deposited via resolver)
+        let taker_bytes = immutables::get_taker(&immutables);
+        let taker_address = address::from_bytes(*taker_bytes);
+        let amount = immutables::get_amount(&immutables);
+        let token_balance = base_escrow::split_token_balance(&mut escrow.base_escrow, amount);
+        let token_coin = coin::from_balance(token_balance, ctx);
+        transfer::public_transfer(token_coin, taker_address);
+
+        // Transfer safety deposit (native tokens) to caller 
+        let caller = tx_context::sender(ctx);
+        let safety_deposit = immutables::get_safety_deposit(&immutables);
+        if (safety_deposit > 0) {
+            base_escrow::transfer_native_to_caller(&mut escrow.base_escrow, safety_deposit, caller, ctx);
+        };
+
+        // Emit cancellation event (using own event)
+        event::emit(EscrowCancelled {
+            escrow_id: object::uid_to_inner(&escrow.id),
+        });
+    }
+
+
 }
