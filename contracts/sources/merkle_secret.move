@@ -120,6 +120,58 @@ module cross_chain_swap::merkle_secret{
     }
 
 
+    public fun validate_for_escrow(
+        validator: &mut MerkleValidator,
+        escrow_id: ID,
+        order_hash: vector<u8>,
+        merkle_root_shortened: vector<u8>,
+        secret_index: u64,
+        secret_hash: vector<u8>,
+        merkle_proof: vector<vector<u8>>,
+    ): bool {
+        // First validate the merkle proof
+        let valid = validate_merkle_proof(
+            validator,
+            order_hash,
+            merkle_root_shortened,
+            secret_index,
+            secret_hash,
+            merkle_proof,
+        );
+
+        if (valid) {
+            // Ensure escrow hasn't been validated before
+            assert!(!table::contains(&validator.escrow_validations, escrow_id), EESCROW_ALREADY_VALIDATED);
+
+            // Store escrow-specific validation
+            let escrow_validation_data = ValidationData {
+                index: secret_index,
+                secret_hash,
+                escrow_id: option::some(escrow_id),
+            };
+            
+            table::add(&mut validator.escrow_validations, escrow_id, escrow_validation_data);
+            
+            // Update order to escrows mapping
+            if (!table::contains(&validator.order_to_escrows, order_hash)) {
+                table::add(&mut validator.order_to_escrows, order_hash, vector::empty<ID>());
+            };
+            
+            let escrow_list = table::borrow_mut(&mut validator.order_to_escrows, order_hash);
+            vector::push_back(escrow_list, escrow_id);
+
+            event::emit(SecretRevealed {
+                order_hash,
+                index: secret_index,
+                secret_hash,
+                escrow_id: option::some(escrow_id),
+            });
+        };
+
+        valid
+    }
+
+
     fun verify_merkle_proof_1inch_style(
         leaf_hash: vector<u8>,
         index: u64,
