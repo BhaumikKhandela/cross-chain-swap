@@ -233,5 +233,41 @@ module cross_chain_swap::partial_fill_orders{
         calculated_index + 1 == validated_index
     }
 
+    public fun validate_partial_fill<T>(
+        order: &PartialFillOrder<T>,
+        making_amount: u64,
+        secret_index: u64,
+        validator: &MerkleValidator,
+    ): bool {
+        // Basic checks
+        if (!order.multiple_fills_allowed) return false;
+        if (making_amount == 0) return false;
+        if (vector::contains(&order.used_secret_indices, &secret_index)) return false;
+        if (merkle_secret::is_secret_revealed(validator, order.order_hash, secret_index)) return false;
+        
+        let remaining_making_amount = balance::value(&order.remaining_balance);
+        if (making_amount > remaining_making_amount) return false;
+
+        // Check if we would have validation data (secret must be revealed first)
+        let mut validation_data_opt = merkle_secret::get_validation_data(
+            validator,
+            order.order_hash,
+            order.hashlock_info
+        );
+        
+        if (option::is_none(&validation_data_opt)) return false;
+        let validation_data = option::extract(&mut validation_data_opt);
+         let validated_index = merkle_secret::get_validation_data_index(&validation_data);
+
+        // Apply 1inch validation logic
+        is_valid_partial_fill_1inch(
+            making_amount,
+            remaining_making_amount,
+            order.total_making_amount,
+            order.parts_amount,
+            validated_index
+        )
+    }
+
     
 }
