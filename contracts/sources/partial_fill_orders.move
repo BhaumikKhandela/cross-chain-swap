@@ -374,5 +374,22 @@ module cross_chain_swap::partial_fill_orders{
         fills
     }
 
+    public fun calculate_fill_percentage<T>(order: &PartialFillOrder<T>, amount: u64): u64 {
+        if (order.total_making_amount == 0) {
+            return 0
+        };
+        (amount * 100) / order.total_making_amount
+    }
+
+     public fun get_order_stats<T>(order: &PartialFillOrder<T>): (u64, u64, u64, u64, u64, bool) {
+        (
+            order.total_making_amount,
+            order.filled_amount,
+            balance::value(&order.remaining_balance),
+            order.parts_amount,
+            order.total_fills,
+            order.multiple_fills_allowed
+        )
+    }
 
 }
