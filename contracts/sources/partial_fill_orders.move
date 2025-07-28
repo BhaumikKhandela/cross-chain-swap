@@ -284,6 +284,95 @@ module cross_chain_swap::partial_fill_orders{
             calculated_index + 1
         }
     }
-
     
+    public fun get_fill_progress<T>(order: &PartialFillOrder<T>): (u64, u64, u64, u64) {
+        (
+            order.filled_amount,                           // Amount filled so far
+            balance::value(&order.remaining_balance),      // Amount remaining
+            (order.filled_amount * 100) / order.total_making_amount, // Percentage filled
+            order.total_fills                              // Number of fills
+        )
+    }
+
+    public fun get_order_hash<T>(order: &PartialFillOrder<T>): &vector<u8> {
+        &order.order_hash
+    }
+
+    public fun get_total_making_amount<T>(order: &PartialFillOrder<T>): u64 {
+        order.total_making_amount
+    }
+
+    public fun get_filled_amount<T>(order: &PartialFillOrder<T>): u64 {
+        order.filled_amount
+    }
+
+    public fun get_remaining_amount<T>(order: &PartialFillOrder<T>): u64 {
+        balance::value(&order.remaining_balance)
+    }
+
+    public fun get_parts_amount<T>(order: &PartialFillOrder<T>): u64 {
+        order.parts_amount
+    }
+
+    public fun get_hashlock_info<T>(order: &PartialFillOrder<T>): &vector<u8> {
+        &order.hashlock_info
+    }
+
+    public fun is_completed<T>(order: &PartialFillOrder<T>): bool {
+        !order.multiple_fills_allowed || balance::value(&order.remaining_balance) == 0
+    }
+
+    public fun allows_multiple_fills<T>(order: &PartialFillOrder<T>): bool {
+        order.multiple_fills_allowed
+    }
+
+    public fun get_fill_record<T>(order: &PartialFillOrder<T>, secret_index: u64): Option<FillRecord> {
+        if (table::contains(&order.fill_records, secret_index)) {
+            option::some(*table::borrow(&order.fill_records, secret_index))
+        } else {
+            option::none()
+        }
+    }
+
+    public fun get_total_fills<T>(order: &PartialFillOrder<T>): u64 {
+        order.total_fills
+    }
+
+    public fun get_used_secret_indices<T>(order: &PartialFillOrder<T>): &vector<u64> {
+        &order.used_secret_indices
+    }
+
+    public fun is_secret_used<T>(order: &PartialFillOrder<T>, secret_index: u64): bool {
+        vector::contains(&order.used_secret_indices, &secret_index)
+    }
+
+    public fun get_fill_percentage<T>(order: &PartialFillOrder<T>): u64 {
+        if (order.total_making_amount == 0) {
+            return 0
+        };
+        (order.filled_amount * 100) / order.total_making_amount
+    }
+
+    public fun get_created_at<T>(order: &PartialFillOrder<T>): u64 {
+        order.created_at
+    }
+
+    public fun get_all_fills<T>(order: &PartialFillOrder<T>): vector<FillRecord> {
+        let mut fills = vector::empty<FillRecord>();
+        let mut i = 0;
+        let indices_len = vector::length(&order.used_secret_indices);
+        
+        while (i < indices_len) {
+            let secret_index = *vector::borrow(&order.used_secret_indices, i);
+            if (table::contains(&order.fill_records, secret_index)) {
+                let record = *table::borrow(&order.fill_records, secret_index);
+                vector::push_back(&mut fills, record);
+            };
+            i = i + 1;
+        };
+        
+        fills
+    }
+
+
 }
