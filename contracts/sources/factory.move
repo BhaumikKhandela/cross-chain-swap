@@ -116,6 +116,8 @@ module cross_chain_swap::factory{
             factory.access_token_type,
             initial_tokens,
             safety_deposit,
+            timelocks,
+            clock,
             ctx
         );
 
@@ -171,6 +173,8 @@ module cross_chain_swap::factory{
             factory.access_token_type,
             initial_tokens,
             safety_deposit,
+            timelocks,
+            clock,
             ctx
         );
 
