@@ -104,6 +104,134 @@ module cross_chain_swap::partial_fill_orders{
         }
     }
 
+     public fun execute_partial_fill<T>(
+        order: &mut PartialFillOrder<T>,
+        making_amount: u64,
+        secret_index: u64,
+        secret_hash: vector<u8>,
+        merkle_proof: vector<vector<u8>>,
+        validator: &mut MerkleValidator,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): Coin<T> {
+        let timestamp = clock::timestamp_ms(clock);
+        let resolver = tx_context::sender(ctx);
+        
+        // Basic validations
+        assert!(order.multiple_fills_allowed, EORDER_COMPLETED);
+        assert!(making_amount > 0, EINVALID_FILL_AMOUNT);
+        assert!(!vector::contains(&order.used_secret_indices, &secret_index), ESECRET_ALREADY_USED);
+        
+        let remaining_making_amount = balance::value(&order.remaining_balance);
+        assert!(making_amount <= remaining_making_amount, EINSUFFICIENT_BALANCE);
+
+        // Validate merkle proof using our updated merkle_secret module
+        let proof_valid = merkle_secret::validate_merkle_proof(
+            validator,
+            order.order_hash,
+            order.hashlock_info,
+            secret_index,
+            secret_hash,
+            merkle_proof,
+        );
+        assert!(proof_valid, EINVALID_PARTIAL_FILL);
+
+        // Get validation data for 1inch partial fill logic
+        let mut validation_data_opt = merkle_secret::get_validation_data(
+            validator,
+            order.order_hash,
+            order.hashlock_info
+        );
+        
+        assert!(option::is_some(&validation_data_opt), EINVALID_PARTIAL_FILL);
+        let validation_data = option::extract(&mut validation_data_opt);
+
+        let validated_index = merkle_secret::get_validation_data_index(&validation_data);
+        // Apply exact 1inch partial fill validation logic
+        let is_valid = is_valid_partial_fill_1inch(
+            making_amount,
+            remaining_making_amount,
+            order.total_making_amount,
+            order.parts_amount,
+            validated_index
+        );
+
+        if (!is_valid) {
+            event::emit(InvalidPartialFillAttempt {
+                order_hash: order.order_hash,
+                attempted_amount: making_amount,
+                secret_index,
+                reason: b"Invalid partial fill calculation",
+            });
+            abort EINVALID_PARTIAL_FILL
+        };
+
+        // Execute the fill
+        let fill_balance = balance::split(&mut order.remaining_balance, making_amount);
+        order.filled_amount = order.filled_amount + making_amount;
+
+        // Record the fill
+        let fill_record = FillRecord {
+            secret_index,
+            fill_amount: making_amount,
+            timestamp,
+            resolver,
+            cumulative_filled: order.filled_amount,
+        };
+        
+        table::add(&mut order.fill_records, secret_index, fill_record);
+        vector::push_back(&mut order.used_secret_indices, secret_index);
+        order.total_fills = order.total_fills + 1;
+
+        // Check if order is completed
+        let new_remaining = balance::value(&order.remaining_balance);
+        if (new_remaining == 0) {
+            order.multiple_fills_allowed = false;
+            event::emit(OrderFullyCompleted {
+                order_hash: order.order_hash,
+                total_amount: order.total_making_amount,
+                total_fills: order.total_fills,
+                final_resolver: resolver,
+            });
+        } else {
+            event::emit(PartialFillExecuted {
+                order_hash: order.order_hash,
+                secret_index,
+                fill_amount: making_amount,
+                remaining_amount: new_remaining,
+                cumulative_filled: order.filled_amount,
+                resolver,
+                timestamp,
+            });
+        };
+
+        coin::from_balance(fill_balance, ctx)
+    }
+
+    fun is_valid_partial_fill_1inch(
+        making_amount: u64,
+        remaining_making_amount: u64,
+        order_making_amount: u64,
+        parts_amount: u64,
+        validated_index: u64
+    ): bool {
+        // Calculate the index based on the new cumulative fill amount
+        let calculated_index = ((order_making_amount - remaining_making_amount + making_amount - 1) * parts_amount) / order_making_amount;
+
+        if (remaining_making_amount == making_amount) {
+            // If the order is filled to completion, a secret with index i + 1 must be used
+            // where i is the index of the secret for the last part.
+            return (calculated_index + 2 == validated_index)
+        } else if (order_making_amount != remaining_making_amount) {
+            // Calculate the previous fill index only if this is not the first fill.
+            let prev_calculated_index = ((order_making_amount - remaining_making_amount - 1) * parts_amount) / order_making_amount;
+            if (calculated_index == prev_calculated_index) {
+                return false
+            };
+        };
+
+        calculated_index + 1 == validated_index
+    }
 
     
 }
