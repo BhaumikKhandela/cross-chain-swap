@@ -268,6 +268,22 @@ module cross_chain_swap::partial_fill_orders{
             validated_index
         )
     }
+ 
+
+    public fun calculate_expected_secret_index<T>(
+        order: &PartialFillOrder<T>,
+        making_amount: u64,
+    ): u64 {
+        let remaining_making_amount = balance::value(&order.remaining_balance);
+        let calculated_index = ((order.total_making_amount - remaining_making_amount + making_amount - 1) * order.parts_amount) / order.total_making_amount;
+        
+        if (remaining_making_amount == making_amount) {
+            // Completion case
+            calculated_index + 2
+        } else {
+            calculated_index + 1
+        }
+    }
 
     
 }
