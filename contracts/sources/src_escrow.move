@@ -303,6 +303,10 @@ fun cancel_internal<T>(
     }
 
 
+   public fun supports_partial_fills<T>(escrow: &EscrowSrc<T>): bool {
+    base_escrow::supports_partial_fills(&escrow.base_escrow)
+}
+
 
 
 
