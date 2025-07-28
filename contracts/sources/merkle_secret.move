@@ -218,5 +218,12 @@ module cross_chain_swap::merkle_secret{
         table::contains(&validator.revealed_secrets, secret_key)
     }
 
+    public fun get_validation_data_index(validation_data: &ValidationData): u64 {
+        validation_data.index
+    }
+
+    public fun get_validation_data_leaf(validation_data: &ValidationData): &vector<u8> {
+        &validation_data.leaf
+    }
    
 }
