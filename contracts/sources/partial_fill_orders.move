@@ -1,286 +1,109 @@
 module cross_chain_swap::partial_fill_orders{
-    use sui::object::{Self, UID, ID};
+   use sui::object::{Self, UID, ID};
     use sui::event;
     use sui::tx_context::{Self, TxContext};
     use sui::table::{Self, Table};
+    use sui::balance::{Self, Balance};
+    use sui::coin::{Self, Coin};
     use std::option::{Self, Option};
     use std::vector;
     use cross_chain_swap::merkle_secret::{Self, MerkleValidator};
+    use sui::clock::Clock;
+    use sui::clock;
 
+    // Error constants
     const EINVALID_PARTS_AMOUNT: u64 = 1;
     const EINVALID_PARTIAL_FILL: u64 = 2;
     const EORDER_COMPLETED: u64 = 3;
     const EINVALID_FILL_AMOUNT: u64 = 4;
-    const ESECRET_INDEX_USED: u64 = 5;
+    const EINSUFFICIENT_BALANCE: u64 = 5;
+    const ESECRET_ALREADY_USED: u64 = 6;
+    const EINVALID_SECRET_INDEX: u64 = 7;
+    const EORDER_NOT_FOUND: u64 = 8;
 
-    public struct PartialFillOrder has key, store {
+
+   public struct FillRecord has copy, drop, store {
+        secret_index: u64,
+        fill_amount: u64,
+        timestamp: u64,
+        resolver: address,
+        cumulative_filled: u64, // Total filled up to this point
+    }
+    
+    public struct PartialFillOrder<phantom T> has key, store {
         id: UID,
         order_hash: vector<u8>,
         total_making_amount: u64,
-        remaining_making_amount: u64,
-        parts_amount: u64,
-        merkle_root_shortened: vector<u8>,
+        filled_amount: u64,               // Cumulative filled amount
+        remaining_balance: Balance<T>,    // Decreases with each fill
+        parts_amount: u64,                // N parts the order is split into
+        hashlock_info: vector<u8>,        // 30-byte merkle root (compatible with merkle_secret)
+        // Fill tracking
+        fill_records: Table<u64, FillRecord>, // secret_index -> FillRecord
+        used_secret_indices: vector<u64>, // Track which secrets have been used
+        total_fills: u64,
+        created_at: u64,
         multiple_fills_allowed: bool,
-        // Track individual fills with enhanced data
-        completed_fills: Table<u64, FillRecord>, // secret_index -> FillRecord
-        total_fills_count: u64,
-        // Track which secret indices have been used
-        used_secret_indices: vector<u64>,
     }
 
-    public struct FillRecord has copy, drop, store {
-        fill_amount: u64,
-        secret_index: u64,
-        fill_sequence: u64,
-        escrow_id: Option<ID>,
-        timestamp: u64,
-        accumulated_fill: u64, // Total filled up to this point
-    }
 
-    public struct OrderFillProgress has copy, drop, store {
-        filled_amount: u64,
-        remaining_amount: u64,
-        current_fill_index: u64,
-        next_expected_secret_index: u64,
-    }
-
-    // Events
-    public struct PartialFillCompleted has copy, drop {
+     // Events
+    public struct PartialFillExecuted has copy, drop {
         order_hash: vector<u8>,
-        fill_amount: u64,
         secret_index: u64,
-        fill_sequence: u64,
-        escrow_id: ID,
+        fill_amount: u64,
         remaining_amount: u64,
-        accumulated_fill: u64,
+        cumulative_filled: u64,
+        resolver: address,
+        timestamp: u64,
     }
 
-    public struct OrderFullyCompleted has copy, drop {
+     public struct OrderFullyCompleted has copy, drop {
         order_hash: vector<u8>,
         total_amount: u64,
         total_fills: u64,
-        final_escrow_id: ID,
+        final_resolver: address,
     }
 
-    public fun new_partial_fill_order(
+
+     public struct InvalidPartialFillAttempt has copy, drop {
+        order_hash: vector<u8>,
+        attempted_amount: u64,
+        secret_index: u64,
+        reason: vector<u8>,
+    }
+
+
+   public fun new_partial_fill_order<T>(
         order_hash: vector<u8>,
         total_making_amount: u64,
         parts_amount: u64,
-        merkle_root_shortened: vector<u8>,
+        hashlock_info: vector<u8>,
+        initial_balance: Balance<T>,
+        clock: &Clock,
         ctx: &mut TxContext
-    ): PartialFillOrder {
+    ): PartialFillOrder<T> {
         assert!(parts_amount >= 2, EINVALID_PARTS_AMOUNT);
         assert!(total_making_amount > 0, EINVALID_FILL_AMOUNT);
+        assert!(balance::value(&initial_balance) == total_making_amount, EINVALID_FILL_AMOUNT);
+        assert!(vector::length(&hashlock_info) == 30, EINVALID_FILL_AMOUNT); // Must be 30 bytes
         
         PartialFillOrder {
             id: object::new(ctx),
             order_hash,
             total_making_amount,
-            remaining_making_amount: total_making_amount,
+            filled_amount: 0,
+            remaining_balance: initial_balance,
             parts_amount,
-            merkle_root_shortened,
-            multiple_fills_allowed: true,
-            completed_fills: table::new(ctx),
-            total_fills_count: 0,
+            hashlock_info,
+            fill_records: table::new(ctx),
             used_secret_indices: vector::empty<u64>(),
+            total_fills: 0,
+            created_at: clock::timestamp_ms(clock),
+            multiple_fills_allowed: true,
         }
     }
 
 
-    public fun validate_partial_fill(
-        order: &PartialFillOrder,
-        making_amount: u64,
-        secret_index: u64,
-        validator: &MerkleValidator,
-    ): bool {
-        // Basic validations
-        if (!order.multiple_fills_allowed) {
-            return making_amount == order.total_making_amount
-        };
-
-        if (making_amount == 0 || making_amount > order.remaining_making_amount) {
-            return false
-        };
-
-        // Check if secret index was already used
-        if (vector::contains(&order.used_secret_indices, &secret_index)) {
-            return false
-        };
-
-        // Check if secret was already revealed globally
-        if (merkle_secret::is_secret_revealed(validator, order.order_hash, secret_index)) {
-            return false
-        };
-
-        // Validate against 1inch partial fill logic
-        is_valid_partial_fill_1inch_style(
-            making_amount,
-            order.remaining_making_amount,
-            order.total_making_amount,
-            order.parts_amount,
-            secret_index
-        )
-    }
-
-    fun is_valid_partial_fill_1inch_style(
-        making_amount: u64,
-        remaining_making_amount: u64,
-        order_making_amount: u64,
-        parts_amount: u64,
-        secret_index: u64
-    ): bool {
-        // Calculate fill index based on current progress
-        let filled_amount = order_making_amount - remaining_making_amount;
-        let new_filled_amount = filled_amount + making_amount;
-        
-        // Calculate expected secret index for this fill level
-        let calculated_index = if (new_filled_amount == order_making_amount) {
-            // Complete fill - use parts_amount as final index
-            parts_amount
-        } else {
-            // Partial fill - calculate based on percentage
-            ((new_filled_amount * parts_amount) / order_making_amount)
-        };
-
-        // Validate against expected secret index
-        if (remaining_making_amount == making_amount) {
-            // Order filled to completion
-            return secret_index == parts_amount || secret_index == calculated_index
-        };
-
-        // For partial fills, secret index should match calculated threshold
-        secret_index == calculated_index || secret_index + 1 == calculated_index
-    }
-
-
-    public fun execute_partial_fill_with_escrow(
-        order: &mut PartialFillOrder,
-        making_amount: u64,
-        secret_index: u64,
-        escrow_id: ID,
-        validator: &MerkleValidator,
-        timestamp: u64,
-    ) {
-        assert!(
-            validate_partial_fill(order, making_amount, secret_index, validator), 
-            EINVALID_PARTIAL_FILL
-        );
-        assert!(making_amount <= order.remaining_making_amount, EINVALID_FILL_AMOUNT);
-        assert!(!vector::contains(&order.used_secret_indices, &secret_index), ESECRET_INDEX_USED);
-
-        // Update order state
-        order.remaining_making_amount = order.remaining_making_amount - making_amount;
-        let accumulated_fill = order.total_making_amount - order.remaining_making_amount;
-
-        // Record the fill
-        let fill_record = FillRecord {
-            fill_amount: making_amount,
-            secret_index,
-            fill_sequence: order.total_fills_count,
-            escrow_id: option::some(escrow_id),
-            timestamp,
-            accumulated_fill,
-        };
-
-        table::add(&mut order.completed_fills, secret_index, fill_record);
-        vector::push_back(&mut order.used_secret_indices, secret_index);
-        order.total_fills_count = order.total_fills_count + 1;
-
-        // Emit appropriate event
-        if (order.remaining_making_amount == 0) {
-            event::emit(OrderFullyCompleted {
-                order_hash: order.order_hash,
-                total_amount: order.total_making_amount,
-                total_fills: order.total_fills_count,
-                final_escrow_id: escrow_id,
-            });
-        } else {
-            event::emit(PartialFillCompleted {
-                order_hash: order.order_hash,
-                fill_amount: making_amount,
-                secret_index,
-                fill_sequence: order.total_fills_count - 1,
-                escrow_id,
-                remaining_amount: order.remaining_making_amount,
-                accumulated_fill,
-            });
-        };
-    }
-
-    public fun get_fill_progress(order: &PartialFillOrder): OrderFillProgress {
-        let filled_amount = order.total_making_amount - order.remaining_making_amount;
-        let current_fill_index = if (order.total_making_amount == 0) {
-            0
-        } else {
-            (filled_amount * order.parts_amount) / order.total_making_amount
-        };
-
-        let next_expected_secret_index = if (order.remaining_making_amount == 0) {
-            order.parts_amount // Order completed
-        } else {
-            current_fill_index + 1
-        };
-
-        OrderFillProgress {
-            filled_amount,
-            remaining_amount: order.remaining_making_amount,
-            current_fill_index,
-            next_expected_secret_index,
-        }
-    }
-
-
-    public fun get_remaining_amount(order: &PartialFillOrder): u64 {
-        order.remaining_making_amount
-    }
-
-    public fun get_total_amount(order: &PartialFillOrder): u64 {
-        order.total_making_amount
-    }
-
-    public fun is_completed(order: &PartialFillOrder): bool {
-        order.remaining_making_amount == 0
-    }
-
-    public fun get_parts_amount(order: &PartialFillOrder): u64 {
-        order.parts_amount
-    }
-
-    public fun get_order_hash(order: &PartialFillOrder): &vector<u8> {
-        &order.order_hash
-    }
-
-    public fun get_merkle_root(order: &PartialFillOrder): &vector<u8> {
-        &order.merkle_root_shortened
-    }
-
-    public fun get_fill_record(order: &PartialFillOrder, secret_index: u64): Option<FillRecord> {
-        if (table::contains(&order.completed_fills, secret_index)) {
-            option::some(*table::borrow(&order.completed_fills, secret_index))
-        } else {
-            option::none()
-        }
-    }
-
-    public fun get_total_fills_count(order: &PartialFillOrder): u64 {
-        order.total_fills_count
-    }
-
-    public fun is_secret_used(order: &PartialFillOrder, secret_index: u64): bool {
-        vector::contains(&order.used_secret_indices, &secret_index)
-    }
-
-    public fun get_used_secret_indices(order: &PartialFillOrder): &vector<u64> {
-        &order.used_secret_indices
-    }
-
-    public fun get_fill_percentage(order: &PartialFillOrder): u64 {
-        if (order.total_making_amount == 0) {
-            return 0
-        };
-        let filled_amount = order.total_making_amount - order.remaining_making_amount;
-        (filled_amount * 100) / order.total_making_amount
-    }
-
-
+    
 }
