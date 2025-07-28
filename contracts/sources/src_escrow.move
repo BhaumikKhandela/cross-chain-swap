@@ -9,7 +9,8 @@ module cross_chain_swap::src_escrow{
     use sui::balance::{Self, Balance};
     use sui::event;
     use sui::address;
-
+    
+    use cross_chain_swap::merkle_secret::{Self, MerkleValidator};
     use cross_chain_swap::base_escrow::{Self, BaseEscrow, EscrowCap, AccessTokenCap};
     
     use libraries::time_lock::{Self, Timelocks};
@@ -47,9 +48,11 @@ module cross_chain_swap::src_escrow{
         access_token_type: address,
         initial_token: Coin<T>,
         safety_deposit: Coin<SUI>,
+        timelocks: Timelocks,
+        clock: &Clock,
         ctx: &mut TxContext
     ): (EscrowSrc<T>, EscrowCap) {
-        let ( mut base_escrow, escrow_cap ) = base_escrow::new<T>(rescue_delay, access_token_type, ctx);
+        let ( mut base_escrow, escrow_cap ) = base_escrow::new<T>(rescue_delay, access_token_type,timelocks,clock, ctx);
 
         
         base_escrow::deposit_tokens(&mut base_escrow, initial_token);
