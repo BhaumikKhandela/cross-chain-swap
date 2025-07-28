@@ -70,6 +70,67 @@ module cross_chain_swap::src_escrow{
 
     }
 
+    public fun new_with_partial_fills<T>(
+    rescue_delay: u64,
+    access_token_type: address,
+    timelocks: Timelocks,
+    order_hash: vector<u8>,
+    total_making_amount: u64,
+    parts_amount: u64,
+    hashlock_info: vector<u8>,
+    initial_tokens: Coin<T>,
+    safety_deposit: Coin<SUI>,
+    clock: &Clock,
+    ctx: &mut TxContext
+): (EscrowSrc<T>, EscrowCap) {
+    let (base_escrow, escrow_cap) = base_escrow::new_with_partial_fills<T>(
+        rescue_delay,
+        access_token_type,
+        timelocks,
+        order_hash,
+        total_making_amount,
+        parts_amount,
+        hashlock_info,
+        coin::into_balance(initial_tokens),
+        clock,
+        ctx
+    );
+
+    // Deposit safety deposit
+    let mut base_escrow_mut = base_escrow;
+    base_escrow::deposit_native(&mut base_escrow_mut, safety_deposit);
+
+    let escrow_src = EscrowSrc<T>{
+        id: object::new(ctx),
+        base_escrow: base_escrow_mut
+    };
+
+    (escrow_src, escrow_cap)
+}
+
+
+public fun execute_partial_fill<T>(
+    escrow: &mut EscrowSrc<T>,
+    making_amount: u64,
+    secret_index: u64,
+    secret_hash: vector<u8>,
+    merkle_proof: vector<vector<u8>>,
+    validator: &mut MerkleValidator,
+    clock: &Clock,
+    ctx: &mut TxContext
+): Coin<T> {
+    base_escrow::execute_partial_fill<T>(
+        &mut escrow.base_escrow,
+        making_amount,
+        secret_index,
+        secret_hash,
+        merkle_proof,
+        validator,
+        clock,
+        ctx
+    )
+}
+
 public fun withdraw<T>(
     escrow: &mut EscrowSrc<T>,
     secret: vector<u8>,
