@@ -23,6 +23,7 @@ module libraries::time_lock {
     const DST_WITHDRAWAL: u64 = 4;
     const DST_PUBLIC_WITHDRAWAL: u64 = 5;
     const DST_CANCELLATION: u64 = 6;
+    const DST_PUBLIC_CANCELLATION: u64 = 7;
 
     // To create timelock
     public fun create_timelock (src_withdrawal: u64,src_public_withdrawal: u64,src_cancellation: u64,src_public_cancellation: u64,
@@ -97,7 +98,10 @@ module libraries::time_lock {
             timelock.dst_public_withdrawal
         } else if (stage == DST_CANCELLATION){
             timelock.dst_cancellation
-        } else {
+        } else if (stage == DST_PUBLIC_CANCELLATION){
+            timelock.dst_public_cancellation
+        } 
+        else {
             abort 1
         };
 
