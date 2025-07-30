@@ -136,8 +136,8 @@ module cross_chain_swap::dst_escrow{
         
         
         let timelocks = immutables::get_timelocks(&immutables);
-        let withdrawal_start = time_lock::get(timelocks, time_lock::get_dst_withdrawal(timelocks));
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        let withdrawal_start = time_lock::get(timelocks, 4);
+        let cancellation_start = time_lock::get(timelocks, 6);
         
         base_escrow::assert_only_after(withdrawal_start, clock);
         base_escrow::assert_only_before(cancellation_start, clock);
@@ -161,8 +161,8 @@ module cross_chain_swap::dst_escrow{
         
         // Check time constraints - must be in private withdrawal period
         let timelocks = immutables::get_timelocks(&immutables);
-        let withdrawal_start = time_lock::get(timelocks, time_lock::get_dst_withdrawal(timelocks));
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        let withdrawal_start = time_lock::get(timelocks, 4);
+        let cancellation_start = time_lock::get(timelocks, 6);
         
         base_escrow::assert_only_after(withdrawal_start, clock);
         base_escrow::assert_only_before(cancellation_start, clock);
@@ -231,8 +231,8 @@ module cross_chain_swap::dst_escrow{
         
         
         let timelocks = immutables::get_timelocks(&immutables);
-        let public_withdrawal_start = time_lock::get(timelocks, time_lock::get_dst_public_withdrawal(timelocks));
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        let public_withdrawal_start = time_lock::get(timelocks, 5);
+        let cancellation_start = time_lock::get(timelocks, 6);
         
         base_escrow::assert_only_after(public_withdrawal_start, clock);
         base_escrow::assert_only_before(cancellation_start, clock);
@@ -255,7 +255,7 @@ module cross_chain_swap::dst_escrow{
         
         
         let timelocks = immutables::get_timelocks(&immutables);
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_dst_cancellation(timelocks));
+        let cancellation_start = time_lock::get(timelocks, 6);
         
         base_escrow::assert_only_after(cancellation_start, clock);
 
@@ -274,7 +274,7 @@ module cross_chain_swap::dst_escrow{
         
         // Check time constraints - must be in public cancellation period
         let timelocks = immutables::get_timelocks(&immutables);
-        let public_cancellation_start = time_lock::get(timelocks, time_lock::get_dst_public_cancellation(timelocks));
+        let public_cancellation_start = time_lock::get(timelocks, 7);
         
         base_escrow::assert_only_after(public_cancellation_start, clock);
 

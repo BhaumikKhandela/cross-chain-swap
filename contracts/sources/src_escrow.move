@@ -141,8 +141,8 @@ public fun withdraw<T>(
     base_escrow::assert_only_taker(&immutables, ctx);
 
     let timelocks = immutables::get_timelocks(&immutables);
-    let withdrawal_start = time_lock::get(timelocks, time_lock::get_src_withdrawal(timelocks));
-    let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+    let withdrawal_start = time_lock::get(timelocks, 0);
+    let cancellation_start = time_lock::get(timelocks, 2);
 
     base_escrow::assert_only_after(withdrawal_start, clock);
     base_escrow::assert_only_before(cancellation_start, clock);
@@ -164,8 +164,8 @@ public fun withdraw_to<T>(
         
         base_escrow::assert_only_taker(&immutables, ctx);
         let timelocks = immutables::get_timelocks(&immutables);
-        let withdrawal_start = time_lock::get(timelocks, time_lock::get_src_withdrawal(timelocks));
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+        let withdrawal_start = time_lock::get(timelocks, 0);
+        let cancellation_start = time_lock::get(timelocks, 2);
         
          base_escrow::assert_only_after(withdrawal_start, clock);
          base_escrow::assert_only_before(cancellation_start, clock);
@@ -184,8 +184,8 @@ public fun public_withdraw<T, AccessToken>(
         // Validation
         base_escrow::assert_access_token_holder(access_cap);
         let timelocks = immutables::get_timelocks(&immutables);
-        let public_withdrawal_start = time_lock::get(timelocks, time_lock::get_src_public_withdrawal(timelocks));
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+        let public_withdrawal_start = time_lock::get(timelocks, 1);
+        let cancellation_start = time_lock::get(timelocks, 2);
         
         base_escrow::assert_only_after(public_withdrawal_start, clock);
         base_escrow::assert_only_before(cancellation_start, clock);
@@ -205,7 +205,7 @@ public fun cancel<T>(
         // Validation
         base_escrow::assert_only_taker(&immutables, ctx);
         let timelocks = immutables::get_timelocks(&immutables);
-        let cancellation_start = time_lock::get(timelocks, time_lock::get_src_cancellation(timelocks));
+        let cancellation_start = time_lock::get(timelocks, 2);
         
         base_escrow::assert_only_after(cancellation_start, clock);
 
@@ -222,7 +222,7 @@ public fun public_cancel<T, AccessToken>(
         // Validation
         base_escrow::assert_access_token_holder(access_cap);
         let timelocks = immutables::get_timelocks(&immutables);
-        let public_cancellation_start = time_lock::get(timelocks, time_lock::get_src_public_cancellation(timelocks));
+        let public_cancellation_start = time_lock::get(timelocks, 3);
         
         base_escrow::assert_only_after(public_cancellation_start, clock);
 
